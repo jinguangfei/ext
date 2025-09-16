@@ -23,6 +23,7 @@
     "zip": "npm run build && node src/zip.js"
   },
   "dependencies": {
+    "axios": "^1.12.2",
     "naive-ui": "^2.43.0",
     "vue": "^3.2.37"
   },

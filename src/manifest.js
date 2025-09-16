@@ -1,5 +1,5 @@
 import { defineManifest } from '@crxjs/vite-plugin'
-import packageData from '../package.json' assert { type: 'json' }
+import packageData from '../package.json' with { type: 'json' }
 
 const isDev = process.env.NODE_ENV == 'development'
 
@@ -28,6 +28,7 @@ export default defineManifest({
     {
       matches: ['http://*/*', 'https://*/*'],
       js: ['src/contentScript/index.js'],
+      run_at: 'document_start',
     },
   ],
   side_panel: {
@@ -35,11 +36,11 @@ export default defineManifest({
   },
   web_accessible_resources: [
     {
-      resources: ['img/logo-16.png', 'img/logo-32.png', 'img/logo-48.png', 'img/logo-128.png'],
-      matches: [],
+      resources: ['img/logo-16.png', 'img/logo-32.png', 'img/logo-48.png', 'img/logo-128.png', 'src/contentScript/content.js'],
+      matches: ['http://*/*', 'https://*/*'],
     },
   ],
-  permissions: ['sidePanel', 'storage'],
+  permissions: ['sidePanel', 'storage', 'debugger', 'tabs', 'windows'],
   chrome_url_overrides: {
     newtab: 'newtab.html',
   },

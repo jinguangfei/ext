@@ -1,112 +1,156 @@
 /**
  * 公用数据库工具类 - 用于popup、sidepanel和其他页面与数据库交互
  */
+// 定义数据库操作协议
+const DB_PROTOCOL = {
+  
+  // 存储区域类型
+  STORAGE_TYPES: {
+    SYNC: 'sync',            // 同步存储
+    LOCAL: 'local',          // 本地存储
+    SESSION: 'session',      // 会话存储
+  },
+
+  // 数据标识配置
+  METADATA: {
+    PREFIX: '__db_',         // 数据库数据前缀
+  }
+}
 
 // 数据库操作工具类
 export class DatabaseClient {
   /**
-   * 设置数据
+   * 设置数据到chrome.storage
    * @param {string} key - 数据键
    * @param {any} value - 数据值
    * @param {string} storageType - 存储类型 ('sync', 'local', 'session')
    */
   static async set(key, value, storageType = 'local') {
-    return new Promise((resolve, reject) => {
-      chrome.runtime.sendMessage({
-        type: 'DB_SET',
-        key: key,
-        value: value,
-        storageType: storageType
-      }, (response) => {
-        if (response && response.success) {
-          resolve(response.data)
-        } else {
-          reject(new Error(response?.error || 'Unknown error'))
-        }
-      })
-    })
+    // 验证存储类型
+    if (!Object.values(DB_PROTOCOL.STORAGE_TYPES).includes(storageType)) {
+      throw new Error(`Invalid storage type: ${storageType}`)
+    }
+
+    const storage = chrome.storage[storageType]
+    
+    // 使用前缀标识数据来源
+    const dbKey = DB_PROTOCOL.METADATA.PREFIX + key
+    const data = { [dbKey]: value }
+    
+    await storage.set(data)
+    console.log(`Data set: ${key} = ${JSON.stringify(value)} in ${storageType}`)
+    
+    return { key, value }
   }
 
   /**
-   * 获取数据
+   * 从chrome.storage获取数据
    * @param {string} key - 数据键
    * @param {string} storageType - 存储类型
    */
   static async get(key, storageType = 'local') {
-    return new Promise((resolve, reject) => {
-      chrome.runtime.sendMessage({
-        type: 'DB_GET',
-        key: key,
-        storageType: storageType
-      }, (response) => {
-        if (response && response.success) {
-          resolve(response.data)
-        } else {
-          reject(new Error(response?.error || 'Unknown error'))
-        }
-      })
-    })
+    // 验证存储类型
+    if (!Object.values(DB_PROTOCOL.STORAGE_TYPES).includes(storageType)) {
+      throw new Error(`Invalid storage type: ${storageType}`)
+    }
+
+    const storage = chrome.storage[storageType]
+    
+    // 使用前缀查找数据
+    const dbKey = DB_PROTOCOL.METADATA.PREFIX + key
+    const result = await storage.get(dbKey)
+    const data = result[dbKey]
+    
+    console.log(`Data get: ${key} = ${JSON.stringify(data)} from ${storageType}`)
+    return data
   }
 
   /**
-   * 删除数据
+   * 从chrome.storage删除数据
    * @param {string} key - 数据键
    * @param {string} storageType - 存储类型
    */
   static async delete(key, storageType = 'local') {
-    return new Promise((resolve, reject) => {
-      chrome.runtime.sendMessage({
-        type: 'DB_DELETE',
-        key: key,
-        storageType: storageType
-      }, (response) => {
-        if (response && response.success) {
-          resolve(response.data)
-        } else {
-          reject(new Error(response?.error || 'Unknown error'))
-        }
-      })
-    })
+    // 验证存储类型
+    if (!Object.values(DB_PROTOCOL.STORAGE_TYPES).includes(storageType)) {
+      throw new Error(`Invalid storage type: ${storageType}`)
+    }
+
+    const storage = chrome.storage[storageType]
+    
+    // 使用前缀删除数据
+    const dbKey = DB_PROTOCOL.METADATA.PREFIX + key
+    await storage.remove(dbKey)
+    
+    console.log(`Data deleted: ${key} from ${storageType}`)
+    
+    return { key }
   }
 
   /**
-   * 清空存储
+   * 清空chrome.storage
    * @param {string} storageType - 存储类型
    */
   static async clear(storageType = 'local') {
-    return new Promise((resolve, reject) => {
-      chrome.runtime.sendMessage({
-        type: 'DB_CLEAR',
-        storageType: storageType
-      }, (response) => {
-        if (response && response.success) {
-          resolve(response.data)
-        } else {
-          reject(new Error(response?.error || 'Unknown error'))
-        }
-      })
-    })
+    // 验证存储类型
+    if (!Object.values(DB_PROTOCOL.STORAGE_TYPES).includes(storageType)) {
+      throw new Error(`Invalid storage type: ${storageType}`)
+    }
+
+    const storage = chrome.storage[storageType]
+    await storage.clear()
+    
+    console.log(`Storage cleared: ${storageType}`)
+    
+    return { cleared: true }
   }
 
   /**
-   * 列出所有存储的数据
+   * 列出所有通过db.js存储的数据
    * @param {string} storageType - 存储类型
    * @param {string} keyword - 可选的过滤关键词
    */
   static async listAll(storageType = 'local', keyword = null) {
-    return new Promise((resolve, reject) => {
-      chrome.runtime.sendMessage({
-        type: 'DB_LIST',
-        storageType: storageType,
-        keyword: keyword
-      }, (response) => {
-        if (response && response.success) {
-          resolve(response.data)
+    // 验证存储类型
+    if (!Object.values(DB_PROTOCOL.STORAGE_TYPES).includes(storageType)) {
+      throw new Error(`Invalid storage type: ${storageType}`)
+    }
+
+    const storage = chrome.storage[storageType]
+    const allData = await storage.get(null) // null表示获取所有数据
+    
+    // 过滤出通过db.js存储的数据（通过前缀识别）
+    const dbData = {}
+    const prefix = DB_PROTOCOL.METADATA.PREFIX
+    
+    for (const [key, value] of Object.entries(allData)) {
+      if (key.startsWith(prefix)) {
+        // 移除前缀，恢复原始键名
+        const originalKey = key.substring(prefix.length)
+        
+        // 如果提供了keyword，进行过滤
+        if (keyword) {
+          // 检查键名是否包含关键词（不区分大小写）
+          const keyMatch = originalKey.toLowerCase().includes(keyword.toLowerCase())
+          
+          if (keyMatch) {
+            dbData[originalKey] = value
+          }
         } else {
-          reject(new Error(response?.error || 'Unknown error'))
+          // 没有keyword时，返回所有数据
+          dbData[originalKey] = value
         }
-      })
-    })
+      }
+    }
+    
+    console.log(`DB data in ${storageType}${keyword ? ` (filtered by: ${keyword})` : ''}:`, dbData)
+    
+    return {
+      storageType: storageType,
+      keyword: keyword,
+      data: dbData,
+      count: Object.keys(dbData).length
+    }
   }
 
   /**
@@ -115,157 +159,56 @@ export class DatabaseClient {
    * @param {function} callback - 变化回调函数
    */
   static listen(key, callback) {
-    // 设置消息监听
-    const messageListener = (request) => {
-      if (request.type === 'DB_CHANGE' && request.key === key) {
+    // 设置chrome.storage变化监听
+    const storageListener = (changes, areaName) => {
+      // 验证存储区域名称
+      if (!Object.values(DB_PROTOCOL.STORAGE_TYPES).includes(areaName)) {
+        return
+      }
+
+      const prefix = DB_PROTOCOL.METADATA.PREFIX
+      const dbKey = prefix + key
+
+      // 检查是否是目标数据的变化
+      if (changes[dbKey]) {
         callback({
-          key: request.key,
-          newValue: request.newValue,
-          oldValue: request.oldValue,
-          areaName: request.areaName
+          key: key,
+          newValue: changes[dbKey].newValue,
+          oldValue: changes[dbKey].oldValue,
+          areaName: areaName
         })
       }
     }
 
-    chrome.runtime.onMessage.addListener(messageListener)
+    chrome.storage.onChanged.addListener(storageListener)
 
     // 返回取消监听的函数
     return () => {
-      chrome.runtime.onMessage.removeListener(messageListener)
+      chrome.storage.onChanged.removeListener(storageListener)
     }
   }
-}
-
-// 使用示例
-export const dbExamples = {
-  // 示例1: 保存用户设置
-  async saveUserSettings(settings) {
-    try {
-      await DatabaseClient.set('userSettings', settings)
-      console.log('用户设置已保存')
-    } catch (error) {
-      console.error('保存用户设置失败:', error)
+  static listenKeyword(keyword, callback) {
+    const storageListener = (changes, areaName) => {
+      // 验证存储区域名称
+      if (!Object.values(DB_PROTOCOL.STORAGE_TYPES).includes(areaName)) {
+        return
+      }
+      const prefix = DB_PROTOCOL.METADATA.PREFIX + keyword
+      for (const [key, change] of Object.entries(changes)) {
+        if (key.startsWith(prefix)) {
+          const originalKey = key.substring(DB_PROTOCOL.METADATA.PREFIX.length)
+          callback({
+            key: originalKey,
+            newValue: change.newValue,
+            oldValue: change.oldValue,
+            areaName: areaName
+          })
+        }
+      }
     }
-  },
-
-  // 示例2: 获取用户设置
-  async getUserSettings() {
-    try {
-      const settings = await DatabaseClient.get('userSettings')
-      return settings || {}
-    } catch (error) {
-      console.error('获取用户设置失败:', error)
-      return {}
-    }
-  },
-
-  // 示例3: 监听计数器变化
-  listenCountChanges(callback) {
-    return DatabaseClient.listen('count', callback)
-  },
-
-  // 示例4: 保存计数器
-  async saveCount(count) {
-    try {
-      await DatabaseClient.set('count', count)
-    } catch (error) {
-      console.error('保存计数器失败:', error)
-    }
-  },
-
-  // 示例5: 查看所有存储的数据
-  async viewAllData(storageType = 'local', keyword = null) {
-    try {
-      const result = await DatabaseClient.listAll(storageType, keyword)
-      console.log(`=== ${storageType} 存储数据${keyword ? ` (过滤: ${keyword})` : ''} ===`)
-      console.log(`数据总数: ${result.count}`)
-      console.log('数据内容:', result.data)
-      return result
-    } catch (error) {
-      console.error('获取所有数据失败:', error)
-      return null
-    }
-  },
-
-  // 示例6: 查看所有存储类型的数据
-  async viewAllStorageData() {
-    const results = {}
-    
-    try {
-      // 查看local存储
-      results.local = await DatabaseClient.listAll('local')
-      
-      // 查看sync存储
-      results.sync = await DatabaseClient.listAll('sync')
-      
-      // 查看session存储
-      results.session = await DatabaseClient.listAll('session')
-      
-      console.log('=== 所有存储数据汇总 ===')
-      console.log(`Local存储: ${results.local.count} 项`)
-      console.log(`Sync存储: ${results.sync.count} 项`)
-      console.log(`Session存储: ${results.session.count} 项`)
-      
-      return results
-    } catch (error) {
-      console.error('获取所有存储数据失败:', error)
-      return null
-    }
-  },
-
-  // 示例7: 按关键词过滤数据
-  async searchData(keyword, storageType = 'local') {
-    try {
-      const result = await DatabaseClient.listAll(storageType, keyword)
-      console.log(`=== 搜索关键词: ${keyword} ===`)
-      console.log(`匹配结果: ${result.count} 项`)
-      console.log('匹配数据:', result.data)
-      return result
-    } catch (error) {
-      console.error('搜索数据失败:', error)
-      return null
-    }
-  },
-
-  // 示例8: 保存用户偏好
-  async saveUserPreferences(preferences) {
-    try {
-      await DatabaseClient.set('userPreferences', preferences, 'sync')
-      console.log('用户偏好已保存到sync存储')
-    } catch (error) {
-      console.error('保存用户偏好失败:', error)
-    }
-  },
-
-  // 示例9: 获取用户偏好
-  async getUserPreferences() {
-    try {
-      const preferences = await DatabaseClient.get('userPreferences', 'sync')
-      return preferences || { theme: 'auto', language: 'zh-CN' }
-    } catch (error) {
-      console.error('获取用户偏好失败:', error)
-      return { theme: 'auto', language: 'zh-CN' }
-    }
-  },
-
-  // 示例10: 保存页面专用数据
-  async savePageData(pageName, data) {
-    try {
-      await DatabaseClient.set(`${pageName}Data`, data)
-      console.log(`${pageName}数据已保存`)
-    } catch (error) {
-      console.error(`保存${pageName}数据失败:`, error)
-    }
-  },
-
-  // 示例11: 获取页面专用数据
-  async getPageData(pageName) {
-    try {
-      const data = await DatabaseClient.get(`${pageName}Data`)
-      return data || {}
-    } catch (error) {
-      console.error(`获取${pageName}数据失败:`, error)
-      return {}
+    chrome.storage.onChanged.addListener(storageListener)
+    return () => {
+      chrome.storage.onChanged.removeListener(storageListener)
     }
   }
 }

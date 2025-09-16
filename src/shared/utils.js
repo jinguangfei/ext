@@ -232,6 +232,122 @@ export function conditionalDebounce(func, delay = 300, condition = () => true) {
 }
 
 /**
+ * 格式化数据大小
+ * @param {any} data - 要计算大小的数据
+ * @returns {string} 格式化后的大小字符串
+ */
+export function formatDataSize(data) {
+  if (!data) return '0 B'
+  
+  let size = 0
+  if (typeof data === 'string') {
+    size = new Blob([data]).size
+  } else {
+    size = new Blob([JSON.stringify(data)]).size
+  }
+  
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+  if (size < 1024 * 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`
+  return `${(size / (1024 * 1024 * 1024)).toFixed(1)} GB`
+}
+
+/**
+ * 下载数据到本地文件
+ * @param {any} data - 要下载的数据
+ * @param {string} filename - 文件名（可选）
+ * @param {Function} onSuccess - 成功回调函数（可选）
+ * @param {Function} onError - 错误回调函数（可选）
+ */
+export function downloadData(data, filename, onSuccess, onError) {
+  try {
+    let content = ''
+    let mimeType = 'text/plain'
+    
+    if (typeof data === 'string') {
+      content = data
+      mimeType = 'text/plain'
+    } else {
+      content = JSON.stringify(data, null, 2)
+      mimeType = 'application/json'
+    }
+    
+    const blob = new Blob([content], { type: mimeType })
+    const url = URL.createObjectURL(blob)
+    
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename || `data_${Date.now()}.${mimeType === 'application/json' ? 'json' : 'txt'}`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    
+    if (onSuccess) onSuccess('数据下载成功')
+  } catch (error) {
+    console.error('下载失败:', error)
+    if (onError) onError('下载失败: ' + error.message)
+  }
+}
+
+/**
+ * 批量下载多个数据文件
+ * @param {Array} dataList - 数据列表，每个元素包含 {data, filename}
+ * @param {Function} onProgress - 进度回调函数（可选）
+ * @param {Function} onComplete - 完成回调函数（可选）
+ */
+export function downloadBatch(dataList, onProgress, onComplete) {
+  let completed = 0
+  const total = dataList.length
+  
+  dataList.forEach((item, index) => {
+    setTimeout(() => {
+      downloadData(
+        item.data,
+        item.filename,
+        () => {
+          completed++
+          if (onProgress) onProgress(completed, total)
+          if (completed === total && onComplete) onComplete()
+        },
+        (error) => {
+          completed++
+          if (onProgress) onProgress(completed, total, error)
+          if (completed === total && onComplete) onComplete()
+        }
+      )
+    }, index * 100) // 每个文件间隔100ms下载
+  })
+}
+
+/**
+ * 创建下载链接（不自动下载）
+ * @param {any} data - 要下载的数据
+ * @param {string} filename - 文件名（可选）
+ * @returns {string} 下载链接URL
+ */
+export function createDownloadLink(data, filename) {
+  try {
+    let content = ''
+    let mimeType = 'text/plain'
+    
+    if (typeof data === 'string') {
+      content = data
+      mimeType = 'text/plain'
+    } else {
+      content = JSON.stringify(data, null, 2)
+      mimeType = 'application/json'
+    }
+    
+    const blob = new Blob([content], { type: mimeType })
+    return URL.createObjectURL(blob)
+  } catch (error) {
+    console.error('创建下载链接失败:', error)
+    return null
+  }
+}
+
+/**
  * 使用示例
  */
 export const utilsExamples = {

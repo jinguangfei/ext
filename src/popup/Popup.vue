@@ -1,6 +1,6 @@
 <script setup lang="js">
 import { ref, watch, onMounted, onUnmounted } from 'vue'
-import { DatabaseClient, dbExamples } from './db-utils.js'
+import { DatabaseClient } from '../shared/db-utils.js'
 
 const count = ref(0)
 const link = ref('https://github.com/guocaoyi/create-chrome-ext')
@@ -13,12 +13,14 @@ const add = () => count.value++
 
 onMounted(async () => {
   try {
+    // 初始化DatabaseClient
+    
     // 使用新的数据库系统获取计数器
     const savedCount = await DatabaseClient.get('count')
     count.value = savedCount || 0
     
     // 监听计数器变化
-    unsubscribeCountListener = dbExamples.listenCountChanges((change) => {
+    unsubscribeCountListener = DatabaseClient.listen('count', (change) => {
       console.log('计数器变化:', change)
       count.value = change.newValue || 0
     })
@@ -46,7 +48,13 @@ watch(count, async (newCount) => {
     await DatabaseClient.set('count', newCount)
     
     // 发送消息给background
-    chrome.runtime.sendMessage({ type: 'COUNT', count: count.value })
+    chrome.runtime.sendMessage({ type: 'COUNT', count: count.value }, (response) => {
+      if (chrome.runtime.lastError) {
+        console.log('发送消息到background失败:', chrome.runtime.lastError)
+      } else {
+        console.log('发送消息到background成功:', response)
+      }
+    })
     
     console.log('计数器已保存到数据库:', newCount)
   } catch (error) {
