@@ -22,6 +22,10 @@ const loadDefaultConfig = async () => {
   }
 }
 
+// 刷新默认配置
+const refreshDefaultConfig = async () => {
+  await loadDefaultConfig()
+}
 
 // 广播默认配置
 const broadcastDefaultConfig = async () => {
@@ -81,11 +85,6 @@ const listenToInterceptedData = () => {
 // 清空拦截数据
 const clearInterceptedData = () => {
   interceptedData.value = []
-}
-
-// 刷新默认配置
-const refreshDefaultConfig = async () => {
-  await loadDefaultConfig()
 }
 
 
