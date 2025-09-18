@@ -81,12 +81,21 @@ else
     return 0
 end
 """
+zpop_min = """
+local handle_key = KEYS[1]
+local one_key = redis.call('ZRANGE', handle_key, 0, 0, 'WITHSCORES')
+if #one_key >= 2 then
+    redis.call('ZREM', handle_key, one_key[1])
+end
+return one_key
+"""
 
 redis_pool = get_redis_pool(RedisSettings())
 
 zadd_with_scores = redis_pool.register_script(zadd_with_scores)
 zadd_with_id = redis_pool.register_script(zadd_with_id)
 h_choke_func = redis_pool.register_script(choke_script)
+zpop_min = redis_pool.register_script(zpop_min)
 
 def loop_r(view_redis_key : str, add_t : int = 20, start_t : int = 0, end_t : int = 0, level : int = 0, loop_type : int = 1) -> Tuple[str,int,int]:
     """

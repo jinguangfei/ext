@@ -40,7 +40,11 @@ export default defineManifest({
       matches: ['http://*/*', 'https://*/*'],
     },
   ],
-  permissions: ['sidePanel', 'storage', 'debugger', 'tabs', 'windows'],
+  permissions: ['sidePanel', 'storage', 'debugger', 'tabs', 'windows', 'cookies'],
+  host_permissions: [
+    'http://*/*',
+    'https://*/*'
+  ],
   chrome_url_overrides: {
     newtab: 'newtab.html',
   },

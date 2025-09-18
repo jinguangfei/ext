@@ -89,3 +89,62 @@ export const sendMessageToAllTabs = async (message) => {
   
   return successCount
 }
+export const gotoUrl = async (url, tabeId ) => {
+  try {
+      // 跳转到指定URL
+      await chrome.tabs.update(tabeId, { url: url })
+  } catch (error) {
+    console.error('[ChromeUtils] 跳转URL失败:', error)
+  }
+}
+
+export const getUA = async () => {
+  return navigator.userAgent
+}
+export const getCookieStr = (domain) => {
+  return new Promise((resolve,reject) => {
+      chrome.cookies.getAll({domain: domain}, function(cookies) {
+        console.log('[ChromeUtils] 获取Cookie:', cookies)
+          resolve(cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; '))
+      })
+  })
+}
+// 设置cookie
+export const setCookie = (domain, name, value, expirationTime=60*25) => {
+  // 自动处理域名格式，确保使用顶级域名
+  let cookieDomain = domain
+  if (domain.includes('://')) {
+    // 如果是完整URL，提取域名
+    const url = new URL(domain)
+    cookieDomain = url.hostname
+  }
+  
+  // 如果是子域名，转换为顶级域名
+  if (cookieDomain.startsWith('www.')) {
+    cookieDomain = cookieDomain.replace('www.', '.')
+  } else if (!cookieDomain.startsWith('.')) {
+    // 如果不是顶级域名格式，添加点前缀
+    cookieDomain = '.' + cookieDomain
+  }
+  if (name){
+      const cookieDetails = {
+          url: domain,
+          name,
+          value,
+          domain: cookieDomain,
+          expirationDate: Math.floor(Date.now() / 1000) + expirationTime, // 过期时间设置
+          path: "/"
+      };
+      chrome.cookies.set(cookieDetails, (cookie) => console.log("Cookie set:", cookie));
+  }
+}
+// 默认 User-Agent
+export const setUserAgent = (tabId, customUserAgent) => {
+  chrome.debugger.sendCommand({ tabId: tabId }, 'Emulation.setUserAgentOverride', { userAgent: customUserAgent }, () => {
+    if (chrome.runtime.lastError) {
+      console.log('[ChromeUtils] 设置User-Agent失败:', chrome.runtime.lastError)
+    } else {
+      console.log('[ChromeUtils] 设置User-Agent成功:', customUserAgent)
+    }
+  });
+}

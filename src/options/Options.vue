@@ -17,7 +17,10 @@ const configForm = ref({
   url_whitelist: [],
   url_blacklist: [],
   body_whitelist: [],
-  body_blacklist: []
+  body_blacklist: [],
+  web: true,
+  timeout: 20,
+  break_flag: ["login","deny"]
 })
 
 // 模态框状态
@@ -194,7 +197,11 @@ const resetConfigForm = () => {
     url_whitelist: [],
     url_blacklist: [],
     body_whitelist: [],
-    body_blacklist: []
+    body_blacklist: [],
+    web: true,
+    timeout: 20,
+    break_flag: ["login","deny"]
+
   }
 }
 

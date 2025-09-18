@@ -8,6 +8,7 @@ import {
   shouldObserveRequest,
   shouldObserveResponse
 } from './config'
+import { setUserAgent } from '../shared/chrome_utils.js'
 class NetworkMonitor {
     constructor() {
       this.config = null // 观察配置
@@ -193,6 +194,8 @@ class NetworkMonitor {
               // 附加debugger
               this.attachToTab(validTabs[0].id)
               this.monitorDebuggerEvent()
+              //setUserAgent(validTabs[0].id, "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.62(0x18003e30) NetType/WIFI Language/zh_CN")
+              setUserAgent(validTabs[0].id, "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X; zh-CN) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 UCBrowser/15.0.0.1001 Mobile AliApp(TUnionSDK/0.1.25.0)")
             })
           } else {
             console.log('[Background] 📄 没有找到可用标签页')
