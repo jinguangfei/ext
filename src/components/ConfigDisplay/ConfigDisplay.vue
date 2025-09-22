@@ -1,49 +1,68 @@
 <template>
-  <n-card title="当前默认配置" size="small" class="config-card">
-    <div v-if="defaultConfig">
-      <n-alert type="success" :title="`${defaultConfig.name} (${defaultConfig.type})`">
-      </n-alert>
-      
-      <n-space style="margin-top: 16px;">
-        <n-button 
-          type="primary" 
-          @click="handleBroadcastConfig"
-          :loading="loading"
-        >
-          广播默认配置
-        </n-button>
-      </n-space>
-    </div>
-    <div v-else>
-      <n-alert type="warning" title="没有设置默认配置">
-        请先在options页面设置默认配置
-      </n-alert>
-      
-    </div>
-  </n-card>
+  <div class="config-display-container">
+    <!-- 标签页选择器 -->
+    <n-card title="选择标签页" size="small" class="tab-selector-card">
+      <TabSelector 
+        ref="tabSelectorRef"
+        @tab-change="handleTabChange"
+        @update:tabs="handleTabsUpdate"
+      />
+      <n-card title="当前默认配置" size="small" class="config-card">
+        <n-alert v-if="defaultConfig" type="success" :title="`${defaultConfig.name} (${defaultConfig.type})`">
+          <n-button 
+            :type="isAbleConfig ? 'success' : 'error'"
+            @click="toggleDebug"
+          >
+            {{ isAbleConfig ? '配置可用' : '配置不可用' }}
+          </n-button>
+        </n-alert>
+        <n-alert v-else type="warning" title="没有设置默认配置">
+          请先在options页面设置默认配置
+        </n-alert>
+      </n-card>
+    </n-card>
+    
+    <!-- 当前默认配置 -->
+  </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from 'vue'
-import { NCard, NAlert, NTag, NSpace, NButton } from 'naive-ui'
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
+import { NCard, NAlert, NTag, NSpace, NButton, NButtonGroup } from 'naive-ui'
 import { DatabaseClient } from '../../shared/db-utils.js'
-import { sendMessageToBackground, sendMessageToAllTabs } from '../../shared/chrome_utils.js'
+import TabSelector from '../TabSelector/TabSelector.vue'
 
 // Props
 const props = defineProps({
-  // 可以接收外部传入的配置
-  config: {
-    type: Object,
-    default: null
-  }
 })
 
-// Emits
-const emit = defineEmits(['config-loaded', 'config-broadcasted'])
+// Emits - 移除所有向上传递的事件，ConfigDisplay 作为最上层选择器
+// const emit = defineEmits(['config-loaded', 'tab-change', 'debug-status-changed', 'tabs-update'])
 
 // 响应式数据
-const defaultConfig = ref(props.config)
-const loading = ref(false)
+const defaultConfig = ref(null)
+const tabs = ref([])
+const tabSelectorRef = ref(null)
+
+// 计算属性 当前tab
+const currentTab = computed(() => {
+  return tabs.value.find(tab => tab.active)
+})
+
+// 计算属性: 当前配置是否可用
+const isAbleConfig = computed(() => {
+  console.log('[ConfigDisplay] 当前配置是否可用:', defaultConfig.value, tabs.value, currentTab.value)
+  if (!defaultConfig.value) return false
+  // 简单匹配逻辑：根据配置的type和name进行匹配
+  if (defaultConfig.value.type !== 'network') {
+    return true
+  } else if (currentTab.value.isDebug) {
+    return true
+  } else {
+    // 对于network类型，检查是否有正在调试的标签页
+    return false
+  }
+})
 
 // 加载默认配置
 const loadDefaultConfig = async () => {
@@ -51,7 +70,8 @@ const loadDefaultConfig = async () => {
     // 先尝试直接获取default_config
     const config = await DatabaseClient.get('default_config')
     defaultConfig.value = config || null
-    emit('config-loaded', defaultConfig.value)
+    // 不再向上传递配置加载事件
+    console.log('[ConfigDisplay] 配置已加载:', defaultConfig.value)
   } catch (error) {
     console.error('[ConfigDisplay] 加载配置失败:', error)
   }
@@ -65,51 +85,34 @@ const setupStorageListener = () => {
   storageUnlisten = DatabaseClient.listen('default_config', (change) => {
     console.log('[ConfigDisplay] 检测到配置变化:', change)
     defaultConfig.value = change.newValue
-    emit('config-loaded', defaultConfig.value)
+    // 不再向上传递配置变化事件
   })
 }
 
-// 广播默认配置
-const broadcastDefaultConfig = async () => {
-  if (!defaultConfig.value) {
-    return
-  }
-
-  loading.value = true
-  try {
-    sendMessageToBackground({ 
-      type: 'OBSERVED_CONFIG', 
-      config: defaultConfig.value 
-    })
-    let successCount = await sendMessageToAllTabs({ 
-      type: 'OBSERVED_CONFIG', 
-      config: defaultConfig.value 
-    })
-    console.log(`配置 "${defaultConfig.value.name}" 已广播到 ${successCount} 个标签页`)
-    emit('config-broadcasted', { config: defaultConfig.value, successCount })
-  } catch (error) {
-    console.error('[ConfigDisplay] 广播配置失败:', error)
-  } finally {
-    loading.value = false
-  }
+// 处理标签页选择变化
+const handleTabChange = (tab) => {
+  chrome.tabs.update(tab.id, { active: true })
+  console.log('[ConfigDisplay] 标签页选择变化:', tab)
 }
 
 
-// 事件处理函数
-const handleBroadcastConfig = () => {
-  broadcastDefaultConfig()
+// 处理标签页列表更新
+const handleTabsUpdate = (updatedTabs) => {
+  console.log('[ConfigDisplay] 标签页列表更新:', updatedTabs)
+  tabs.value = updatedTabs
+}
+const toggleDebug = () => {
+  if (currentTab.value.isDebug) {
+    tabSelectorRef.value.tabDetach(currentTab.value.id)
+  } else {
+    tabSelectorRef.value.tabAttach(currentTab.value.id)
+  }
 }
 
-// 监听props变化
-watch(() => props.config, (newConfig) => {
-  defaultConfig.value = newConfig
-})
 
 // 组件挂载时加载配置并设置监听器
 onMounted(async () => {
-  if (!props.config) {
-    await loadDefaultConfig()
-  }
+  await loadDefaultConfig()
   setupStorageListener()
 })
 
@@ -123,16 +126,7 @@ onUnmounted(() => {
   }
 })
 
-// 暴露方法给父组件
-defineExpose({
-  loadDefaultConfig,
-  broadcastDefaultConfig,
-  defaultConfig
-})
 </script>
 
 <style scoped>
-.config-card {
-  margin-bottom: 16px;
-}
 </style>

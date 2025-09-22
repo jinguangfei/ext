@@ -1,28 +1,24 @@
 <template>
-    <n-select
-        v-model:value="selectedTabId"
-        :options="tabOptions"
-        :loading="loading"
-        placeholder="选择标签页"
-        clearable
-        filterable
-        @update:value="handleTabChange"
-        class="tab-select"
-    >
-    </n-select>
+      <n-select
+          v-model:value="selectedTabId"
+          :options="tabOptions"
+          :loading="loading"
+          placeholder="选择标签页"
+          clearable
+          filterable
+          @update:value="handleTabChange"
+          class="tab-select"
+      >
+      </n-select>
+      
 </template>
 
 <script setup>
 import { ref, onMounted, computed, watch, nextTick, markRaw } from 'vue'
-import { NSelect, NButton, NSpace, NIcon, NEmpty } from 'naive-ui'
+import { NSelect, NButton, NSpace, NIcon, NEmpty, NTag } from 'naive-ui'
 
 // Props
 const props = defineProps({
-  // 当前选中的标签页ID
-  modelValue: {
-    type: [Number, String],
-    default: null
-  },
   // 自定义过滤函数
   filterFunction: {
     type: Function,
@@ -36,13 +32,12 @@ const props = defineProps({
 })
 
 // Emits
-const emit = defineEmits(['update:modelValue', 'tab-change', 'refresh'])
-
+const emit = defineEmits(['tab-change', 'update:tabs'])
 
 // 响应式数据
 const tabs = ref([])
+const selectedTabId = ref(null)
 const loading = ref(false)
-const selectedTabId = ref(props.modelValue)
 
 // 计算属性：格式化标签页选项
 const tabOptions = computed(() => {
@@ -58,6 +53,11 @@ const tabOptions = computed(() => {
       value: tab.id
     }
   })
+})
+
+// 计算属性：当前选中的标签页
+const selectedTab = computed(() => {
+  return tabs.value.find(tab => tab.id === selectedTabId.value)
 })
 
 // 获取正在调试的标签页ID集合
@@ -136,25 +136,78 @@ const getAllTabs = async () => {
 const handleTabChange = (tabId) => {
   const selectedTab = tabs.value.find(tab => tab.id === tabId)
   if (selectedTab) {
-    emit('update:modelValue', tabId)
     emit('tab-change', selectedTab)
   }
 }
 
-// 监听props变化
-watch(() => props.modelValue, (newValue) => {
-  if (newValue !== selectedTabId.value) {
-    selectedTabId.value = newValue
-  }
-}, { immediate: true })
-
-// 组件挂载时获取标签页
-onMounted(async () => {
+// 切换单个tab的debug状态
+const tabAttach = async (tabId) => {
   try {
-    await getAllTabs()
+    const tab = tabs.value.find(t => t.id === tabId)
+    if (!tab) {
+      console.error('[TabSelector] 未找到标签页:', tabId)
+      return
+    }
+
+    // 检查URL是否有效
+    if (!tab.url || (!tab.url.startsWith('http://') && !tab.url.startsWith('https://'))) {
+      console.info('[TabSelector] 标签页URL无效，无法调试:', tab.url)
+      return
+    }
+
+    if (tab.isDebug) {
+      // 停止调试
+      await chrome.debugger.detach({ tabId })
+      console.log('[TabSelector] 已停止调试标签页:', tabId)
+    } else {
+      // 开始调试
+      await chrome.debugger.attach({ tabId }, '1.3')
+      await chrome.debugger.sendCommand({ tabId }, 'Network.enable')
+      console.log('[TabSelector] 已开始调试标签页:', tabId)
+    }
+
+    // 更新本地状态
+    tab.isDebug = !tab.isDebug
     
-    // 只在必要时监听标签页变化
-    if (chrome.tabs) {
+  } catch (error) {
+    console.error('[TabSelector] 切换debug状态失败:', error)
+  }
+}
+const tabDetach = async (tabId) => {
+  try {
+    const tab = tabs.value.find(t => t.id === tabId)
+    if (!tab) {
+      console.error('[TabSelector] 未找到标签页:', tabId)
+      return
+    }
+    await chrome.debugger.detach({ tabId })
+    console.log('[TabSelector] 已停止调试标签页:', tabId)
+    tab.isDebug = false
+  } catch (error) {
+    console.error('[TabSelector] 停止调试标签页失败:', error)
+  }
+}
+
+// 监听tabs变化并同步到父组件
+watch(tabs, (newTabs) => {
+  emit('update:tabs', newTabs)
+}, { deep: true, immediate: true })
+
+function listenTabChange() {
+   // 只在必要时监听标签页变化
+   if (chrome.tabs) {
+      selectedTabId.value = tabs.value.find(tab => tab.active)?.id
+      chrome.tabs.onActivated.addListener((activeInfo) => {
+        selectedTabId.value = tabs.value.find(tab => tab.id === activeInfo.tabId)?.id
+        tabs.value.map(tab => {
+          if (tab.id === activeInfo.tabId) {
+            tab.active = true
+          } else if (tab.active) {
+            tab.active = false
+          }
+        })
+      })
+
       chrome.tabs.onRemoved.addListener((tabId) => {
         // 只移除对应的tab，不刷新整个列表
         const index = tabs.value.findIndex(tab => tab.id === tabId)
@@ -194,29 +247,41 @@ onMounted(async () => {
         }
       })
     }
-    
-    // 监听debugger事件来更新特定tab的debug状态
-    if (chrome.debugger) {
-      console.log('[TabSelector] chrome.debugger', chrome.debugger)
-      console.log('[TabSelector] chrome.debugger', chrome.debugger.onAttach)
-      console.log('[TabSelector] chrome.debugger', chrome.debugger.onDetach)
+}
 
-      chrome.debugger.onDetach.addListener(async (source) => {
-        const tabIndex = tabs.value.findIndex(tab => tab.id === source.tabId)
-        if (tabIndex !== -1) {
-          tabs.value[tabIndex].isDebug = false
-          console.log('[TabSelector] 标签页停止调试:', source.tabId)
-        }
-      })
-    }
+function listenDebuggerEvent() {
+  // 监听debugger事件来更新特定tab的debug状态
+  if (chrome.debugger) {
+    
+    // 监听debugger分离事件
+    chrome.debugger.onDetach.addListener(async (source) => {
+      const tabIndex = tabs.value.findIndex(tab => tab.id === source.tabId)
+      if (tabIndex !== -1) {
+        tabs.value[tabIndex].isDebug = false
+        console.log('[TabSelector] 标签页停止调试:', source.tabId)
+      }
+    })
+  }
+}
+
+
+// 组件挂载时获取标签页
+onMounted(async () => {
+  try {
+    await getAllTabs()
+    listenTabChange() // 监听标签页变化
+    listenDebuggerEvent() // 监听debugger事件
   } catch (error) {
     console.error('[TabSelector] 组件挂载失败:', error)
   }
 })
+
+defineExpose({
+  tabAttach,
+  tabDetach
+})
+
 </script>
 
 <style scoped>
-.tab-select {
-  width: 100%;
-}
 </style>

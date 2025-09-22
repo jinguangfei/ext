@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { NButton, NSpace, NCard, NTag, NAlert, NDivider } from 'naive-ui'
 import { DatabaseClient} from '../shared/db-utils.js'
-import { TabSelector, DataDisplay, CookieInjector, ConfigDisplay } from '../components/index.js'
+import { DataDisplay, CookieInjector, ConfigDisplay } from '../components/index.js'
 import { getCurrentTab, setupTabListeners, sendMessageToBackground, sendMessageToAllTabs, gotoUrl } from '../shared/chrome_utils.js'
 import { getUA, getCookieStr, setCookie, setUserAgent, clearAll, setCookieStr } from '../shared/chrome_utils.js'
 import { api } from '../api/index.js'
@@ -23,14 +23,7 @@ const taskInfo = ref({}) // 任务信息
 
 const taskTimeout = ref(60) // 任务超时时间（秒）
 
-// TabSelector 相关数据
-const selectedTabId = ref(null) // 选中的标签页ID
-const selectedTab = ref(null) // 选中的标签页对象
 
-// Cookie注入相关数据已移至CookieInjector组件
-
-// 配置相关功能已移至ConfigDisplay组件
-// 保留defaultConfig用于任务调度器判断
 
 // 发送拦截数据到服务器
 const sendInterceptedDataToServer = async (data) => {
@@ -240,6 +233,9 @@ onMounted(async () => {
   setupTabListeners(currentTab) // 设置标签页监听器
   listenToInterceptedData()
   
+  // 加载默认配置
+  await loadDefaultConfig()
+  
   // 启动倒计时定时器
   startCountdownTimer()
 })
@@ -269,21 +265,19 @@ const startCountdownTimer = () => {
   updateCountdown()
 }
 
-// TabSelector 事件处理
-const handleTabChange = (tab) => {
-  selectedTab.value = tab
-  chrome.tabs.update(tab.id, { active: true })
-  console.log('[SidePanel] TabSelector 选中标签页:', tab)
-}
 
-const handleTabRefresh = (tabs) => {
-  console.log('[SidePanel] TabSelector 刷新标签页列表:', tabs.length, '个标签页')
-}
 
-// 配置相关事件处理
-const handleConfigLoaded = (config) => {
-  defaultConfig.value = config
-  console.log('[SidePanel] 配置已加载:', config)
+
+// 配置相关事件处理 - ConfigDisplay 不再向上传递事件，需要直接获取配置
+const loadDefaultConfig = async () => {
+  try {
+    const { DatabaseClient } = await import('../shared/db-utils.js')
+    const config = await DatabaseClient.get('default_config')
+    defaultConfig.value = config || null
+    console.log('[SidePanel] 配置已加载:', defaultConfig.value)
+  } catch (error) {
+    console.error('[SidePanel] 加载配置失败:', error)
+  }
 }
 
 const handleConfigBroadcasted = (data) => {
@@ -291,23 +285,12 @@ const handleConfigBroadcasted = (data) => {
 }
 
 
-const handleClearAll = () => {
-  console.log('[SidePanel] 清除所有数据')
-}
-
 // Cookie注入功能已移至CookieInjector组件
 </script>
 
 <template>
   <n-config-provider>
     <div class="sidepanel-container">
-      <!-- TabSelector 组件演示 -->
-      <TabSelector 
-        v-model="selectedTabId"
-        @tab-change="handleTabChange"
-        @refresh="handleTabRefresh"
-      />
-
       <!-- 任务调度器控制 -->
       <n-card title="任务调度器" size="small" class="scheduler-card">
         <div v-if="defaultConfig">
@@ -383,13 +366,8 @@ const handleClearAll = () => {
         </div>
       </n-card>
 
-      <!-- 配置展示组件 -->
-      <ConfigDisplay 
-        :config="defaultConfig"
-        @config-loaded="handleConfigLoaded"
-        @config-broadcasted="handleConfigBroadcasted"
-        @clear-all="handleClearAll"
-      />
+      <!-- 配置展示组件 - ConfigDisplay 作为最上层选择器，不再监听事件 -->
+      <ConfigDisplay />
 
       <!-- Cookie注入工具 -->
       <CookieInjector 

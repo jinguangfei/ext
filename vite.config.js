@@ -19,12 +19,12 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [crx({ manifest }), vue()],
     server: {
-      port: 5173,
+      port: 5172,
       strictPort: true,
       hmr: {
-        port: 5173,
+        port: 5172,
         host: 'localhost',
-        clientPort: 5173,
+        clientPort: 5172,
       },
     },
     legacy: {
