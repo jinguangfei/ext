@@ -138,6 +138,14 @@ export const setCookie = (domain, name, value, expirationTime=60*25) => {
       chrome.cookies.set(cookieDetails, (cookie) => console.log("Cookie set:", cookie));
   }
 }
+export const setCookieStr = (domain, cookieStr) => {
+  const cookies = cookieStr.replace(/\s/g, "").split(";")
+  console.log("Cookies:", cookies)
+  cookies.forEach(cookie => {
+    const [name, value] = cookie.split("=")
+    setCookie(domain, name, value)
+  })
+}
 // 默认 User-Agent
 export const setUserAgent = (tabId, customUserAgent) => {
   chrome.debugger.sendCommand({ tabId: tabId }, 'Emulation.setUserAgentOverride', { userAgent: customUserAgent }, () => {
@@ -147,4 +155,19 @@ export const setUserAgent = (tabId, customUserAgent) => {
       console.log('[ChromeUtils] 设置User-Agent成功:', customUserAgent)
     }
   });
+}
+export const clearAll = () => {
+  chrome.browsingData.remove({
+      "since": 0
+  }, {
+      "appcache": true,
+      "cache": true,
+      "cookies": true,
+      "fileSystems": true,
+      "formData": true,
+      "history": true,
+      "indexedDB": true,
+      "localStorage": true,
+      "webSQL": true
+  }, function(){});
 }

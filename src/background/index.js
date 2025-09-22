@@ -5,6 +5,9 @@ console.log('[Background] background is running')
 
 // 导入数据库管理器（自动初始化）
 // dbManager 会自动处理所有数据库相关的消息
+  console.log('[Background] chrome.debugger', chrome.debugger)
+  console.log('[Background] chrome.debugger', chrome.debugger.onAttach)
+  console.log('[Background] chrome.debugger', chrome.debugger.onDetach)
 
 const initialConfig = {
   "name": "pdd",

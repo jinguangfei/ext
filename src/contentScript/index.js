@@ -58,27 +58,38 @@ window.addEventListener('message', function(event) {
       }
     })
   } 
-})
+});
 
-// 监听来自popup/sidepanel的消息
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  switch (request.type) {
-    case OBSERVED_CONFIG:
-      // 向页面上下文发送完整的配置信息
-      console.log('[ContentScript] 📨 收到配置:', request.config)
-      window.postMessage({
-        type: OBSERVED_CONFIG,
-        config: request.config
-      }, '*')
-      sendResponse({ success: true, message: '配置已发送到页面' })
-      break
-    default:
-      console.log('[ContentScript] 📨 收到未知消息:', request)
-      sendResponse({ success: false, error: 'Unknown message type' })
-  }
-  
-  return true // 保持消息通道开放
-})
+(async () => {
+  DatabaseClient.listen('default_config', (change) => {
+    console.log('[ContentScript] 📨 收到配置变化:', change)
+    window.postMessage({
+      type: OBSERVED_CONFIG,
+      config: change.newValue
+    }, '*')
+  })
+  console.log('[ContentScript] 📨 监听配置变化完成')
+})()
+
+//// 监听来自popup/sidepanel的消息
+//chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+//  switch (request.type) {
+//    case OBSERVED_CONFIG:
+//      // 向页面上下文发送完整的配置信息
+//      console.log('[ContentScript] 📨 收到配置:', request.config)
+//      window.postMessage({
+//        type: OBSERVED_CONFIG,
+//        config: request.config
+//      }, '*')
+//      sendResponse({ success: true, message: '配置已发送到页面' })
+//      break
+//    default:
+//      console.log('[ContentScript] 📨 收到未知消息:', request)
+//      sendResponse({ success: false, error: 'Unknown message type' })
+//  }
+//  
+//  return true // 保持消息通道开放
+//})
 
 // 注入拦截器（异步）
 injectXHRInterceptor()

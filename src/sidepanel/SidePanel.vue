@@ -1,10 +1,10 @@
 <script setup lang="js">
-import { ref, onMounted, onUnmounted, computed, h } from 'vue'
-import { NButton, NSpace, NCard, NTag, NAlert, NDataTable } from 'naive-ui'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { NButton, NSpace, NCard, NTag, NAlert, NDivider } from 'naive-ui'
 import { DatabaseClient} from '../shared/db-utils.js'
+import { TabSelector, DataDisplay, CookieInjector, ConfigDisplay } from '../components/index.js'
 import { getCurrentTab, setupTabListeners, sendMessageToBackground, sendMessageToAllTabs, gotoUrl } from '../shared/chrome_utils.js'
-import { getUA, getCookieStr, setCookie, setUserAgent } from '../shared/chrome_utils.js'
-import { formatDataSize, downloadData } from '../shared/utils.js'
+import { getUA, getCookieStr, setCookie, setUserAgent, clearAll, setCookieStr } from '../shared/chrome_utils.js'
 import { api } from '../api/index.js'
 
 // 响应式数据
@@ -15,63 +15,38 @@ const interceptedDataCount = ref(0) // 拦截到的数据数量
 const loading = ref(false) // 加载状态
 
 const taskSchedulerStatus = ref('stopped') // 任务调度器状态
-const currentUrl = ref('') // 当前URL
 const nextTaskTime = ref(Date.now() + 5000) // 当前时间戳 + 5秒
 const countdown = ref(0) // 倒计时秒数
 const isTaskRunning = ref(false) // 任务是否正在执行
-const currentTaskUrl = ref('') // 当前任务URL
+const workerInfo = ref({}) // 工人信息
+const taskInfo = ref({}) // 任务信息
+
 const taskTimeout = ref(60) // 任务超时时间（秒）
 
-// 加载默认配置
-const loadDefaultConfig = async () => {
-  try {
-    // 先尝试直接获取default_config
-    const config = await DatabaseClient.get('default_config')
-    defaultConfig.value = config || null
-  } catch (error) {
-  }
-}
+// TabSelector 相关数据
+const selectedTabId = ref(null) // 选中的标签页ID
+const selectedTab = ref(null) // 选中的标签页对象
 
-// 刷新默认配置
-const refreshDefaultConfig = async () => {
-  await loadDefaultConfig()
-}
+// Cookie注入相关数据已移至CookieInjector组件
 
-// 广播默认配置
-const broadcastDefaultConfig = async () => {
-  if (!defaultConfig.value) {
-    return
-  }
-
-  loading.value = true
-  try {
-    sendMessageToBackground({ 
-      type: 'OBSERVED_CONFIG', 
-      config: defaultConfig.value 
-    })
-    let successCount = await sendMessageToAllTabs({ 
-      type: 'OBSERVED_CONFIG', 
-      config: defaultConfig.value 
-    })
-    console.log(`配置 "${defaultConfig.value.name}" 已广播到 ${successCount} 个标签页`)
-  } catch (error) {
-  } finally {
-    loading.value = false
-  }
-}
+// 配置相关功能已移至ConfigDisplay组件
+// 保留defaultConfig用于任务调度器判断
 
 // 发送拦截数据到服务器
 const sendInterceptedDataToServer = async (data) => {
   try {
     console.log('[SidePanel] 发送拦截数据到服务器:', data)
+    workerInfo.value = {
+      cookie: await getCookieStr(".taobao.com"),
+    }
     
     // 发送到服务器完成任务
-    const response = await api.configOverTask({
-      url: currentUrl.value,
+    const response = await api.overTask({
+      task_info: taskInfo.value,
+      worker_info: workerInfo.value,
       real_url: data.url,
       result: data.data,
       ua: await getUA(),
-      cookie: await getCookieStr(".taobao.com")
     })
     
     console.log('[SidePanel] 服务器响应:', response)
@@ -82,10 +57,10 @@ const sendInterceptedDataToServer = async (data) => {
     } else if (response.data.flag === "slide"){
       if (response.data.info){
         setCookie("https://www.taobao.com", "x5sec", response.data.info)
+        setCookie("https://www.tmall.com", "x5sec", response.data.info)
       }
       updateNextTaskTime()
     } else {
-      interceptedDataCount.value++
       updateNextTaskTime()
     }
     // 根据服务器返回值设置临时timeout
@@ -117,6 +92,9 @@ const listenToInterceptedData = () => {
       interceptedData.value = interceptedData.value.slice(0, 3)
     }
     
+    // 增加拦截数据计数
+    interceptedDataCount.value++
+    
     // 发送数据到服务器
     await sendInterceptedDataToServer(interceptedItem)
   }
@@ -139,6 +117,7 @@ const listenToInterceptedData = () => {
 
 // 清空拦截数据
 const clearInterceptedData = () => {
+  interceptedDataCount.value = 0
   interceptedData.value = []
 }
 
@@ -147,7 +126,7 @@ const startTaskScheduler = async () => {
   try {
     taskSchedulerStatus.value = 'running'
     // 初始化下次任务时间
-    updateNextTaskTime()
+    updateNextTaskTime(3)
     console.log('[SidePanel] 任务调度器已启动')
   } catch (error) {
     console.error('[SidePanel] 启动任务调度器失败:', error)
@@ -183,24 +162,34 @@ const fetchAndExecuteTask = async () => {
   isTaskRunning.value = true
   try {
     console.log('[SidePanel] 开始获取任务...')
-    
+    workerInfo.value = {
+      cookie: await getCookieStr(".taobao.com"),
+    }
+    console.log('[SidePanel] 获取任务工人信息:', workerInfo.value)
     // 获取任务URL
-    const taskUrl = await api.configGetTask()
-    console.log('[SidePanel] 获取到任务URL:', taskUrl)
+    const workerTaskInfo = (await api.getTask(workerInfo.value)).data
+    const workerTaskInfoTest = {
+      task_info: {
+      "item_id":"834550783063",
+      "task_type":"LT_TAOBAO",
+      },
+      short_url: "https://e.tb.cn/h.SXH6trIriZcKCun"
+    }
+    console.log('[SidePanel] 获取到任务URL:', workerTaskInfo)
     
-    if (taskUrl && taskUrl.data) {
-      currentTaskUrl.value = taskUrl.data
-      currentUrl.value = taskUrl.data
-      
+    if (workerTaskInfo && workerTaskInfo.short_url) {
+
+      taskInfo.value = workerTaskInfo.task_info
+
       // 跳转到任务URL
       if (currentTab.value && currentTab.value.id) {
-        await gotoUrl(taskUrl.data, currentTab.value.id)
+        await gotoUrl(workerTaskInfo.short_url, currentTab.value.id)
       }
       
       // 更新下次任务时间
       updateNextTaskTime(60)
     } else {
-      console.log('[SidePanel] 没有获取到任务')
+      console.log('[SidePanel] 没有获取到任务 {{workerTaskInfo.flag}}')
       // 没有任务时，设置较短的等待时间
       nextTaskTime.value = Date.now() + 3000 // 3秒后重试
     }
@@ -243,52 +232,11 @@ const formatCountdown = computed(() => {
 })
 
 
-// 格式化拦截数据显示
-const formatInterceptedData = (data) => {
-  return {
-    ...data,
-    dataSize: formatDataSize(data.data),
-    originalData: data.data // 保存原始数据用于下载
-  }
-}
-
-// 拦截数据表格列定义
-const interceptedColumns = [
-  {
-    title: '时间',
-    key: 'date',
-    width: 160
-  },
-  {
-    title: '名称',
-    key: 'name',
-    width: 80
-  },
-  {
-    title: '数据大小',
-    key: 'dataSize',
-    width: 100,
-    render: (row) => {
-      return h(NButton, {
-        size: 'small',
-        type: 'primary',
-        text: true,
-        onClick: () => downloadData(row.originalData, `${row.name}_${row.date.replace(/[^\w]/g, '_')}`)
-      }, { default: () => row.dataSize })
-    }
-  }
-]
-
-// 计算属性：格式化后的拦截数据
-const formattedInterceptedData = computed(() => {
-  return interceptedData.value.map(formatInterceptedData)
-})
 
 // 定时器引用
 let countdownTimer = null
 
 onMounted(async () => {
-  await loadDefaultConfig()
   setupTabListeners(currentTab) // 设置标签页监听器
   listenToInterceptedData()
   
@@ -320,21 +268,45 @@ const startCountdownTimer = () => {
   // 立即更新一次
   updateCountdown()
 }
+
+// TabSelector 事件处理
+const handleTabChange = (tab) => {
+  selectedTab.value = tab
+  chrome.tabs.update(tab.id, { active: true })
+  console.log('[SidePanel] TabSelector 选中标签页:', tab)
+}
+
+const handleTabRefresh = (tabs) => {
+  console.log('[SidePanel] TabSelector 刷新标签页列表:', tabs.length, '个标签页')
+}
+
+// 配置相关事件处理
+const handleConfigLoaded = (config) => {
+  defaultConfig.value = config
+  console.log('[SidePanel] 配置已加载:', config)
+}
+
+const handleConfigBroadcasted = (data) => {
+  console.log('[SidePanel] 配置已广播:', data)
+}
+
+
+const handleClearAll = () => {
+  console.log('[SidePanel] 清除所有数据')
+}
+
+// Cookie注入功能已移至CookieInjector组件
 </script>
 
 <template>
   <n-config-provider>
     <div class="sidepanel-container">
-
-
-      <!-- 当前活动标签页 -->
-      <n-card title="当前活动标签页" size="small" class="tab-card" v-if="currentTab">
-        <n-alert type="info" :title="currentTab.title">
-          <template #header-extra>
-            <n-tag type="info" size="small">{{ currentTab.url }}</n-tag>
-          </template>
-        </n-alert>
-      </n-card>
+      <!-- TabSelector 组件演示 -->
+      <TabSelector 
+        v-model="selectedTabId"
+        @tab-change="handleTabChange"
+        @refresh="handleTabRefresh"
+      />
 
       <!-- 任务调度器控制 -->
       <n-card title="任务调度器" size="small" class="scheduler-card">
@@ -373,7 +345,7 @@ const startCountdownTimer = () => {
               <template #header-extra>
                 <n-tag type="info" size="small">执行中</n-tag>
               </template>
-              <p v-if="currentTaskUrl">任务URL: {{ currentTaskUrl }}</p>
+              <p v-if="taskInfo">任务INFO: {{ taskInfo.item_id }} {{ taskInfo.task_type }}</p>
             </n-alert>
           </div>
           
@@ -411,83 +383,26 @@ const startCountdownTimer = () => {
         </div>
       </n-card>
 
-      <!-- 默认配置展示 -->
-      <n-card title="当前默认配置" size="small" class="config-card">
-        <div v-if="defaultConfig">
-          <n-alert type="success" :title="`${defaultConfig.name} (${defaultConfig.type})`">
-            <template #header-extra>
-              <n-tag type="success" size="small">{{ defaultConfig.domain }}</n-tag>
-            </template>
-            <!--
-            <p>域名: {{ defaultConfig.domain }}</p>
-            <p>类型: {{ defaultConfig.type }}</p>
-            <p>URL白名单: {{ defaultConfig.url_whitelist?.join(', ') || '无' }}</p>
-            <p>URL黑名单: {{ defaultConfig.url_blacklist?.join(', ') || '无' }}</p>
-            -->
-          </n-alert>
-          
-          <n-space style="margin-top: 16px;">
-            <n-button 
-              type="primary" 
-              @click="broadcastDefaultConfig"
-              :loading="loading"
-            >
-              广播默认配置
-            </n-button>
-            <n-button 
-              @click="refreshDefaultConfig"
-            >
-              刷新配置
-            </n-button>
-          </n-space>
-        </div>
-        <div v-else>
-          <n-alert type="warning" title="没有设置默认配置">
-            请先在options页面设置默认配置
-          </n-alert>
-          
-          <n-space style="margin-top: 16px;">
-            <n-button 
-              @click="refreshDefaultConfig"
-            >
-              刷新配置
-            </n-button>
-          </n-space>
-        </div>
-      </n-card>
+      <!-- 配置展示组件 -->
+      <ConfigDisplay 
+        :config="defaultConfig"
+        @config-loaded="handleConfigLoaded"
+        @config-broadcasted="handleConfigBroadcasted"
+        @clear-all="handleClearAll"
+      />
+
+      <!-- Cookie注入工具 -->
+      <CookieInjector 
+        @inject-success="(data) => console.log('[SidePanel] Cookie注入成功:', data)"
+        @inject-error="(error) => console.error('[SidePanel] Cookie注入失败:', error)"
+      />
 
       <!-- 拦截数据展示 -->
-      <n-card title="拦截到的数据" size="small" class="intercepted-card">
-        <template #header-extra>
-          <n-space>
-            <n-tag type="info" size="small">
-              共 {{ interceptedDataCount }} 条
-            </n-tag>
-            <n-button 
-              size="small" 
-              type="error" 
-              @click="clearInterceptedData"
-            >
-              清空
-            </n-button>
-          </n-space>
-        </template>
-
-        <div v-if="interceptedData.length > 0">
-          <n-data-table
-            :columns="interceptedColumns"
-            :data="formattedInterceptedData"
-            :pagination="false"
-            size="small"
-            max-height="400"
-          />
-        </div>
-        <div v-else>
-          <n-alert type="info" title="暂无拦截数据">
-            等待网络请求被拦截...
-          </n-alert>
-        </div>
-      </n-card>
+      <DataDisplay 
+        :data="interceptedData"
+        :count="interceptedDataCount"
+        @clear="clearInterceptedData"
+      />
 
     </div>
   </n-config-provider>
@@ -498,5 +413,20 @@ const startCountdownTimer = () => {
   padding: 16px;
   max-width: 100%;
   overflow-x: auto;
+}
+
+.selected-tab-info {
+  margin-top: 12px;
+}
+
+.selected-tab-info p {
+  margin: 4px 0;
+  font-size: 14px;
+}
+
+.demo-controls h4 {
+  margin: 0 0 8px 0;
+  color: #333;
+  font-size: 14px;
 }
 </style>

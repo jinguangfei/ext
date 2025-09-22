@@ -133,6 +133,30 @@ const initDefaultConfigs = () => {
       url_blacklist: [],
       body_whitelist: [],
       body_blacklist: []
+    },
+    {
+      name: "lt_detail",
+      type: "network",
+      domain: "taobao.com",
+      url_whitelist: ["mtop.taobao.ltao.detail.h5.data.get"],
+      url_blacklist: [],
+      body_whitelist: [],
+      body_blacklist: ["FAIL_SYS_TOKEN",],
+      web: true,
+      timeout: 12,
+      break_flag: ["login","deny"]
+    },
+    {
+      name: "pc",
+      type: "network",
+      domain: ".com",
+      url_whitelist: ["mtop.taobao.pcdetail.data.get"],
+      url_blacklist: [],
+      body_whitelist: [],
+      body_blacklist: ["FAIL_SYS_TOKEN",],
+      web: true,
+      timeout: 12,
+      break_flag: ["login","deny"]
     }
   ]
   

@@ -40,7 +40,7 @@ export default defineManifest({
       matches: ['http://*/*', 'https://*/*'],
     },
   ],
-  permissions: ['sidePanel', 'storage', 'debugger', 'tabs', 'windows', 'cookies'],
+  permissions: ['sidePanel', 'storage', 'debugger', 'tabs', 'windows', 'cookies', 'browsingData'],
   host_permissions: [
     'http://*/*',
     'https://*/*'

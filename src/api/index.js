@@ -5,6 +5,6 @@ export const api = {
     // 配置相关
     configCurrent: (params = {}) => request.get('/config/current', { params }),
     // 任务相关
-    configGetTask: () => request.post('/config/get_task'),
-    configOverTask: (data = {}) => request.post('/config/over_task', data),
+    getTask: (data = {}) => request.post('/config/get_task', data),
+    overTask: (data = {}) => request.post('/config/over_task', data),
 }
