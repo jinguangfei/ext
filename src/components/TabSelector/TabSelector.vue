@@ -134,9 +134,13 @@ const getAllTabs = async () => {
 
 // 处理标签页选择变化
 const handleTabChange = (tabId) => {
-  const selectedTab = tabs.value.find(tab => tab.id === tabId)
-  if (selectedTab) {
-    emit('tab-change', selectedTab)
+  try {
+    const selectedTab = tabs.value.find(tab => tab.id === tabId)
+    if (selectedTab) {
+      emit('tab-change', selectedTab)
+    }
+  } catch (error) {
+    console.error('[TabSelector] 处理标签页选择变化失败:', error)
   }
 }
 
@@ -196,23 +200,36 @@ watch(tabs, (newTabs) => {
 function listenTabChange() {
    // 只在必要时监听标签页变化
    if (chrome.tabs) {
-      selectedTabId.value = tabs.value.find(tab => tab.active)?.id
+      try {
+        selectedTabId.value = tabs.value.find(tab => tab.active)?.id
+      } catch (error) {
+        console.error('[TabSelector] 设置初始选中标签页失败:', error)
+      }
+      
       chrome.tabs.onActivated.addListener((activeInfo) => {
-        selectedTabId.value = tabs.value.find(tab => tab.id === activeInfo.tabId)?.id
-        tabs.value.map(tab => {
-          if (tab.id === activeInfo.tabId) {
-            tab.active = true
-          } else if (tab.active) {
-            tab.active = false
-          }
-        })
+        try {
+          selectedTabId.value = tabs.value.find(tab => tab.id === activeInfo.tabId)?.id
+          tabs.value.forEach(tab => {
+            if (tab.id === activeInfo.tabId) {
+              tab.active = true
+            } else if (tab.active) {
+              tab.active = false
+            }
+          })
+        } catch (error) {
+          console.error('[TabSelector] 处理标签页激活失败:', error)
+        }
       })
 
       chrome.tabs.onRemoved.addListener((tabId) => {
-        // 只移除对应的tab，不刷新整个列表
-        const index = tabs.value.findIndex(tab => tab.id === tabId)
-        if (index !== -1) {
-          tabs.value.splice(index, 1)
+        try {
+          // 只移除对应的tab，不刷新整个列表
+          const index = tabs.value.findIndex(tab => tab.id === tabId)
+          if (index !== -1) {
+            tabs.value.splice(index, 1)
+          }
+        } catch (error) {
+          console.error('[TabSelector] 移除标签页失败:', error)
         }
       })
       
@@ -221,7 +238,7 @@ function listenTabChange() {
         try {
           tabs.value.push(tab)
         } catch (error) {
-          console.error('添加新标签页失败:', error)
+          console.error('[TabSelector] 添加新标签页失败:', error)
         }
       })
       
@@ -243,7 +260,7 @@ function listenTabChange() {
             console.log('[TabSelector] 更新标签页信息:', tabId, changeInfo)
           }
         } catch (error) {
-          console.error('更新标签页信息失败:', error)
+          console.error('[TabSelector] 更新标签页信息失败:', error)
         }
       })
     }
@@ -255,10 +272,14 @@ function listenDebuggerEvent() {
     
     // 监听debugger分离事件
     chrome.debugger.onDetach.addListener(async (source) => {
-      const tabIndex = tabs.value.findIndex(tab => tab.id === source.tabId)
-      if (tabIndex !== -1) {
-        tabs.value[tabIndex].isDebug = false
-        console.log('[TabSelector] 标签页停止调试:', source.tabId)
+      try {
+        const tabIndex = tabs.value.findIndex(tab => tab.id === source.tabId)
+        if (tabIndex !== -1) {
+          tabs.value[tabIndex].isDebug = false
+          console.log('[TabSelector] 标签页停止调试:', source.tabId)
+        }
+      } catch (error) {
+        console.error('[TabSelector] 处理debugger分离事件失败:', error)
       }
     })
   }

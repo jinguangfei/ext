@@ -58,45 +58,37 @@ function shouldObserveResponse(config, url, requestData, responseData, type) {
   }
   return true
 }
-// 处理debugger事件
+// 处理debugger事件 - 这个函数现在只作为辅助函数，实际的事件处理在Monitor类中
 function handleDebuggerEvent(source, method, params) {
-  const tabId = source.tabId
-  
-  switch (method) {
-    case 'Network.requestWillBeSent':
-      this.handleRequestWillBeSent(tabId, params)
-      break
-      
-    case 'Network.loadingFinished':
-      this.handleLoadingFinished(tabId, params)
-      break
-      
-    default:
-      // 忽略其他事件
-      break
-  }
+  // 这个函数现在不再直接处理事件，而是由Monitor类的方法来处理
+  console.warn('[Monitor] handleDebuggerEvent 全局函数已弃用，请使用 Monitor 类的方法')
 }
 
 class Monitor {
-  constructor(result_ref) {
+  constructor(config, result) {
     this.requestMap = new Map()
-    this.config = null
-    self.reduslt = result_ref
+    this.config = config
+    this.result = result
   }
 
   init() {
-    chrome.debugger.onEvent.addListener(this.handleDebuggerEvent)
+    chrome.debugger.onEvent.addListener((source, method, params) => {
+      this.handleDebuggerEvent(source, method, params)
+    })
   }
 
  // 处理请求发送事件
   handleRequestWillBeSent(tabId, params) {
+    if (!this.config || !this.result ) {
+      return
+    }
 
     const requestId = params.requestId
     const request = params.request
     const requestUrl = params.request.url
     const requestData = params.request.data
 
-    if (shouldObserveRequest(this.config, requestUrl, requestData, OBSERVED_TYPE)) {
+    if (shouldObserveRequest(this.config.value, requestUrl, requestData, OBSERVED_TYPE)) {
       // 存储请求信息
       this.requestMap.set(requestId, {
         tabId,
@@ -118,6 +110,9 @@ class Monitor {
     }
   } 
   async handleLoadingFinished(tabId, params) {
+    if (!this.config || !this.result ) {
+      return
+    }
     const requestId = params.requestId
     const requestInfo = this.requestMap.get(requestId)
     
@@ -133,16 +128,16 @@ class Monitor {
         { requestId }
       )
 
-      if (shouldObserveResponse(this.config, requestInfo.url, requestInfo.data, responseBody.body, OBSERVED_TYPE)){
+      if (shouldObserveResponse(this.config.value, requestInfo.url, requestInfo.data, responseBody.body, OBSERVED_TYPE)){
         console.log('[Monitor] 观察到Network请求:', requestInfo)
         const postMessage = {
           url: requestInfo.url,
-          config: this.config,
+          config: this.config.value,
           response: responseBody.body,
           timestamp: new Date().toISOString()
         } // 通过storage保存
         //chrome.storage.local.set({ ["network_observed_response"]: postMessage })
-        this.result_ref.value = postMessage
+        this.result.value = postMessage
       } else {
         console.log('[Monitor] 未观察到Network请求:', requestInfo)
       }
@@ -173,3 +168,6 @@ class Monitor {
     }
   }
 }
+
+// 导出 Monitor 类和相关函数
+export { Monitor, shouldObserveConfig, shouldObserveRequest, shouldObserveResponse }

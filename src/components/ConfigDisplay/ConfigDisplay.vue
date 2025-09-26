@@ -36,8 +36,8 @@ import TabSelector from '../TabSelector/TabSelector.vue'
 const props = defineProps({
 })
 
-// Emits - 移除所有向上传递的事件，ConfigDisplay 作为最上层选择器
-// const emit = defineEmits(['config-loaded', 'tab-change', 'debug-status-changed', 'tabs-update'])
+// Emits - 添加 isAbleConfig 状态同步事件
+const emit = defineEmits(['is-able-config-changed'])
 
 // 响应式数据
 const defaultConfig = ref(null)
@@ -56,7 +56,7 @@ const isAbleConfig = computed(() => {
   // 简单匹配逻辑：根据配置的type和name进行匹配
   if (defaultConfig.value.type !== 'network') {
     return true
-  } else if (currentTab.value.isDebug) {
+  } else if (currentTab.value && currentTab.value.isDebug) {
     return true
   } else {
     // 对于network类型，检查是否有正在调试的标签页
@@ -101,10 +101,16 @@ const handleTabsUpdate = (updatedTabs) => {
   console.log('[ConfigDisplay] 标签页列表更新:', updatedTabs)
   tabs.value = updatedTabs
 }
+
+// 监听 isAbleConfig 变化并向上传递事件
+watch(isAbleConfig, (newValue, oldValue) => {
+  console.log('[ConfigDisplay] isAbleConfig 状态变化:', { oldValue, newValue })
+  emit('is-able-config-changed', newValue)
+}, { immediate: true })
 const toggleDebug = () => {
-  if (currentTab.value.isDebug) {
+  if (currentTab.value && currentTab.value.isDebug) {
     tabSelectorRef.value.tabDetach(currentTab.value.id)
-  } else {
+  } else if (currentTab.value) {
     tabSelectorRef.value.tabAttach(currentTab.value.id)
   }
 }
@@ -124,6 +130,15 @@ onUnmounted(() => {
     storageUnlisten = null
     console.log('[ConfigDisplay] 组件卸载，清理storage监听器')
   }
+})
+
+// 暴露给父组件的数据和方法
+defineExpose({
+  defaultConfig,
+  currentTab,
+  isAbleConfig,
+  loadDefaultConfig,
+  toggleDebug
 })
 
 </script>
