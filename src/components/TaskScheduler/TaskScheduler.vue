@@ -1,8 +1,9 @@
 <script setup lang="js">
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { NButton, NSpace, NCard, NTag, NAlert } from 'naive-ui'
-import { getCurrentTab, gotoUrl } from '../../shared/chrome_utils.js'
-import { getUA, getCookieStr, setCookie } from '../../shared/chrome_utils.js'
+import { getCurrentTab, gotoUrl, setCookieStr } from '../../shared/chrome_utils.js'
+import { clearAll, getUA, getCookieStr, setCookie } from '../../shared/chrome_utils.js'
+import { DatabaseClient } from '../../shared/db-utils.js'
 import { api } from '../../api/index.js'
 import { Monitor } from '../../shared/monitor.js'
 import DataDisplay from '../DataDisplay/DataDisplay.vue'
@@ -15,6 +16,7 @@ const countdown = ref(0) // 倒计时秒数
 const isTaskRunning = ref(false) // 任务是否正在执行
 const workerInfo = ref({}) // 工人信息
 const taskInfo = ref({}) // 任务信息
+const cookie = ref({}) // cookie信息
 const taskTimeout = ref(60) // 任务超时时间（秒）
 const loading = ref(false) // 加载状态
 
@@ -67,7 +69,7 @@ const initMonitor = () => {
         monitor.init()
     }
   } catch (error) {
-    console.error('[TaskScheduler] 初始化monitor失败:', error)
+    console.info('[TaskScheduler] 初始化monitor失败:', error)
   }
 }
 
@@ -114,32 +116,21 @@ const clearInterceptedData = () => {
 const sendInterceptedDataToServer = async (data) => {
   try {
     console.log('[TaskScheduler] 发送拦截数据到服务器:', data)
-    workerInfo.value = {
-      cookie: await getCookieStr(".taobao.com"),
-    }
     
     // 发送到服务器完成任务
     const response = await api.overTask({
       task_info: taskInfo.value,
-      worker_info: workerInfo.value,
+      cookie : cookie.value,
       real_url: data.url,
       result: data.data,
       ua: await getUA(),
     })
     
     console.log('[TaskScheduler] 服务器响应:', response)
-    if (response.data.flag === "login"){
-      updateNextTaskTime(24 * 60 * 60)
-    } else if (response.data.flag === "deny"){
-      updateNextTaskTime(60 * 60)
-    } else if (response.data.flag === "slide"){
-      if (response.data.info){
-        setCookie("https://www.taobao.com", "x5sec", response.data.info)
-        setCookie("https://www.tmall.com", "x5sec", response.data.info)
-      }
-      updateNextTaskTime()
+    if (response.data.flag === "slide"){
+      updateNextTaskTime(60)
     } else {
-      updateNextTaskTime()
+      updateNextTaskTime(currentConfig.value.timeout)
     }
     
     return response
@@ -169,7 +160,7 @@ const startTaskScheduler = async () => {
     updateNextTaskTime(3)
     console.log('[TaskScheduler] 任务调度器已启动')
   } catch (error) {
-    console.error('[TaskScheduler] 启动任务调度器失败:', error)
+    console.info('[TaskScheduler] 启动任务调度器失败:', error)
   } finally {
     loading.value = false
   }
@@ -200,6 +191,7 @@ const updateCountdown = () => {
 // 获取并执行任务
 const fetchAndExecuteTask = async () => {
   if (isTaskRunning.value) return
+  console.clear()
   
   // 检查配置是否可用
   if (!isAbleConfig.value) {
@@ -213,10 +205,9 @@ const fetchAndExecuteTask = async () => {
   try {
     console.log('[TaskScheduler] 开始获取任务...')
     workerInfo.value = {
-      cookie: await getCookieStr(".taobao.com"),
+      //cookie: await getCookieStr(".taobao.com"),
+      cookie : "",
     }
-    console.log('[TaskScheduler] 获取任务工人信息:', workerInfo.value)
-    
     // 获取任务URL
     const workerTaskInfo = (await api.getTask(workerInfo.value)).data
     const workerTaskInfoTest = {
@@ -224,16 +215,25 @@ const fetchAndExecuteTask = async () => {
         "item_id":"834550783063",
         "task_type":"LT_TAOBAO",
       },
-      short_url: "https://e.tb.cn/h.SXH6trIriZcKCun"
+      short_url: "https://e.tb.cn/h.SXH6trIriZcKCun",
+      config: {},
+      cookie: {},
     }
     console.log('[TaskScheduler] 获取到任务URL:', workerTaskInfo)
     
-    if (workerTaskInfo && workerTaskInfo.short_url) {
-      taskInfo.value = workerTaskInfo.task_info
+    taskInfo.value = workerTaskInfo.task_info
+    cookie.value = workerTaskInfo.cookie
+    const short_url = workerTaskInfo.short_url
+    if (short_url) {
+      // set config
+      DatabaseClient.set("default_config", workerTaskInfo.config)
+      clearAll()
+      setCookieStr("https://www.taobao.com",cookie.value.cookie)
+      setCookieStr("https://www.tmall.com",cookie.value.cookie)
 
       // 跳转到任务URL
       if (currentTab.value && currentTab.value.id) {
-        await gotoUrl(workerTaskInfo.short_url, currentTab.value.id)
+        await gotoUrl(short_url, currentTab.value.id)
       }
       
       // 更新下次任务时间
@@ -245,7 +245,7 @@ const fetchAndExecuteTask = async () => {
       nextTaskTime.value = Date.now() + 3000 // 3秒后重试
     }
   } catch (error) {
-    console.error('[TaskScheduler] 获取任务失败:', error)
+    console.info('[TaskScheduler] 获取任务失败:', error)
     // 出错时设置较短的等待时间
     nextTaskTime.value = Date.now() + 10000 // 10秒后重试
     // emit('task-error', error) - 已移除，不需要同步
@@ -269,7 +269,7 @@ const updateNextTaskTime = (timeout) => {
     }
     console.log('[TaskScheduler] 下次任务时间更新为:', new Date(nextTaskTime.value).toLocaleString())
   } catch (error) {
-    console.error('[TaskScheduler] 更新下次任务时间失败:', error)
+    console.info('[TaskScheduler] 更新下次任务时间失败:', error)
     // 设置默认超时时间
     nextTaskTime.value = Date.now() + (taskTimeout.value * 1000)
   }
