@@ -167,6 +167,7 @@ onMounted(async () => {
   // 初始化DatabaseClient
   await loadData()
   await loadConfigs()
+  await initDefaultConfigsAction()
 })
 
 // 加载所有数据
@@ -318,6 +319,7 @@ const initDefaultConfigsAction = async () => {
   loading.value = true
   try {
     const defaultConfigs = initDefaultConfigs()
+    await setDefaultConfig("lt_detail", defaultConfigs[3])
     let successCount = 0
     
     for (const config of defaultConfigs) {

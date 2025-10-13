@@ -19,7 +19,6 @@ export default defineManifest({
     default_icon: 'img/logo-48.png',
   },
   options_page: 'options.html',
-  devtools_page: 'devtools.html',
   background: {
     service_worker: 'src/background/index.js',
     type: 'module',
@@ -44,8 +43,5 @@ export default defineManifest({
   host_permissions: [
     'http://*/*',
     'https://*/*'
-  ],
-  chrome_url_overrides: {
-    newtab: 'newtab.html',
-  },
+  ]
 })

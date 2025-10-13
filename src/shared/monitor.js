@@ -39,7 +39,10 @@ function shouldObserveResponse(config, url, requestData, responseData, type) {
     return false
   }
   // 可选检查：请求体白名单
-  if (config.body_whitelist && config.body_whitelist.length > 0 && responseData) {
+  if (config.body_whitelist && config.body_whitelist.length > 0) {
+    if (!responseData){
+      return false
+    }
     const bodyMatches = config.body_whitelist.some(pattern => 
       responseData.toString().includes(pattern)
     )
@@ -129,13 +132,13 @@ class Monitor {
       )
 
       if (shouldObserveResponse(this.config.value, requestInfo.url, requestInfo.data, responseBody.body, OBSERVED_TYPE)){
-        console.log('[Monitor] 观察到Network请求:', requestInfo)
         const postMessage = {
           url: requestInfo.url,
           config: this.config.value,
           response: responseBody.body,
           timestamp: new Date().toISOString()
         } // 通过storage保存
+        console.log('[Monitor] 观察到Network请求:', postMessage)
         //chrome.storage.local.set({ ["network_observed_response"]: postMessage })
         this.result.value = postMessage
       } else {

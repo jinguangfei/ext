@@ -1,111 +1,51 @@
-<script setup lang="js">
-import { ref, watch, onMounted, onUnmounted } from 'vue'
-import { DatabaseClient } from '../shared/db-utils.js'
+<script setup>
+import { ref, onMounted } from 'vue'
+import LoginView from '@/views/login/index.vue'
+import ProfileView from '@/views/profile/index.vue'
+import { getToken } from '@utils/auth/token.js'
 
-const count = ref(0)
-const link = ref('https://github.com/guocaoyi/create-chrome-ext')
-let unsubscribeCountListener = null
+const isLoggedIn = ref(false)
+const isLoading = ref(true)
 
-const minus = () => {
-  if (count.value > 0) count.value--
+// 检查登录状态
+async function checkLoginStatus() {
+  isLoading.value = true
+  try {
+    const token = await getToken()
+    isLoggedIn.value = !!token
+  } catch (e) {
+    console.error('检查登录状态失败', e)
+    isLoggedIn.value = false
+  } finally {
+    isLoading.value = false
+  }
 }
-const add = () => count.value++
 
-onMounted(async () => {
-  try {
-    // 初始化DatabaseClient
-    
-    // 使用新的数据库系统获取计数器
-    const savedCount = await DatabaseClient.get('count')
-    count.value = savedCount || 0
-    
-    // 监听计数器变化
-    unsubscribeCountListener = DatabaseClient.listen('count', (change) => {
-      console.log('计数器变化:', change)
-      count.value = change.newValue || 0
-    })
-    
-    console.log('数据库系统初始化完成')
-  } catch (error) {
-    console.error('初始化数据库失败:', error)
-    // 降级到原有的chrome.storage方式
-    chrome.storage.sync.get(['count'], (result) => {
-      count.value = result.count || 0
-    })
-  }
-})
-
-onUnmounted(() => {
-  // 清理监听器
-  if (unsubscribeCountListener) {
-    unsubscribeCountListener()
-  }
-})
-
-watch(count, async (newCount) => {
-  try {
-    // 使用新的数据库系统保存计数器
-    await DatabaseClient.set('count', newCount)
-    
-    // 发送消息给background
-    chrome.runtime.sendMessage({ type: 'COUNT', count: count.value }, (response) => {
-      if (chrome.runtime.lastError) {
-        console.log('发送消息到background失败:', chrome.runtime.lastError)
-      } else {
-        console.log('发送消息到background成功:', response)
-      }
-    })
-    
-    console.log('计数器已保存到数据库:', newCount)
-  } catch (error) {
-    console.error('保存计数器失败:', error)
-    // 降级到原有的chrome.storage方式
-    chrome.storage.sync.set({ count: newCount })
-  }
+// 组件挂载时检查登录状态
+onMounted(() => {
+  checkLoginStatus()
+  
+  // 监听登录成功事件
+  window.addEventListener('loginSuccess', () => {
+    isLoggedIn.value = true
+  })
 })
 </script>
 
 <template>
-  <n-config-provider>
-    <main>
-      <n-card title="Chrome 扩展" style="margin: 16px;">
-        <n-space vertical>
-          <n-h3>计数器</n-h3>
-          
-          <n-space justify="between" align="center">
-            <n-button 
-              @click="minus" 
-              :disabled="count <= 0"
-              type="error"
-              circle
-            >
-              -
-            </n-button>
-            <n-tag type="info" size="large">{{ count }}</n-tag>
-            <n-button 
-              @click="add"
-              type="success"
-              circle
-            >
-              +
-            </n-button>
-          </n-space>
-
-        </n-space>
-      </n-card>
-    </main>
-  </n-config-provider>
+  <div v-if="isLoading" class="w-full h-full flex items-center justify-center">
+    <div>加载中...</div>
+  </div>
+  <ProfileView v-else-if="isLoggedIn" />
+  <LoginView v-else />
 </template>
 
-<style>
-body {
-  min-width: 20rem;
+<style scoped>
+/* popup 窗口样式优化 */
+html, body, #app {
+  width: 100%;
+  height: 100%;
   margin: 0;
   padding: 0;
-}
-
-main {
-  padding: 0;
-  margin: 0;
 }
 </style>

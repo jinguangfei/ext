@@ -1,7 +1,7 @@
 <script setup lang="js">
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { NButton, NSpace, NCard, NTag, NAlert } from 'naive-ui'
-import { getCurrentTab, gotoUrl, setCookieStr } from '../../shared/chrome_utils.js'
+import { getCurrentTab, gotoUrl, fetchUrl, setCookieStr } from '../../shared/chrome_utils.js'
 import { clearAll, getUA, getCookieStr, setCookie } from '../../shared/chrome_utils.js'
 import { DatabaseClient } from '../../shared/db-utils.js'
 import { api } from '../../api/index.js'
@@ -68,6 +68,7 @@ const initMonitor = () => {
         monitor = new Monitor(currentConfig, interceptedData)
         monitor.init()
     }
+    console.info('[TaskScheduler] 初始化monitor成功')
   } catch (error) {
     console.info('[TaskScheduler] 初始化monitor失败:', error)
   }
@@ -77,8 +78,9 @@ const initMonitor = () => {
 // 监听拦截数据变化
 const watchInterceptedData = () => {
   watch(interceptedData, (newData) => {
+    console.info('[TaskScheduler] 检测到拦截数据:', newData)
     if (newData && isAbleConfig.value) {
-      console.log('[TaskScheduler] 检测到拦截数据:', newData)
+      console.info('[TaskScheduler] 检测到拦截数据:', newData)
       
       // 添加到拦截数据列表
       const interceptedItem = {
@@ -115,6 +117,8 @@ const clearInterceptedData = () => {
 // 发送拦截数据到服务器
 const sendInterceptedDataToServer = async (data) => {
   try {
+
+    await gotoUrl("https://www.baidu.com", currentTab.value.id)
     console.log('[TaskScheduler] 发送拦截数据到服务器:', data)
     
     // 发送到服务器完成任务
@@ -128,9 +132,9 @@ const sendInterceptedDataToServer = async (data) => {
     
     console.log('[TaskScheduler] 服务器响应:', response)
     if (response.data.flag === "slide"){
-      updateNextTaskTime(60)
+      updateNextTaskTime()
     } else {
-      updateNextTaskTime(currentConfig.value.timeout)
+      updateNextTaskTime()
     }
     
     return response
@@ -152,9 +156,6 @@ const startTaskScheduler = async () => {
     }
     
     taskSchedulerStatus.value = 'running'
-    
-    // 启动监听拦截数据
-    watchInterceptedData()
     
     // 初始化下次任务时间
     updateNextTaskTime(3)
@@ -230,14 +231,22 @@ const fetchAndExecuteTask = async () => {
       clearAll()
       setCookieStr("https://www.taobao.com",cookie.value.cookie)
       setCookieStr("https://www.tmall.com",cookie.value.cookie)
+      setCookieStr("https://www.tmall.hk",cookie.value.cookie)
 
       // 跳转到任务URL
       if (currentTab.value && currentTab.value.id) {
-        await gotoUrl(short_url, currentTab.value.id)
+        if (workerTaskInfo.config.type=="network") {
+          await gotoUrl(short_url, currentTab.value.id)
+          console.log('[TaskScheduler] 跳转到任务URL:', short_url)
+        } else if (workerTaskInfo.config.type=="fetch") {
+          //const body = await fetchUrl(short_url, currentTab.value.id)
+          console.log('[TaskScheduler] 请求任务URL:', short_url)
+          //console.log('[TaskScheduler] 请求任务URL:', body)
+        }
       }
       
       // 更新下次任务时间
-      updateNextTaskTime(60)
+      updateNextTaskTime(30)
       
     } else {
       console.log('[TaskScheduler] 没有获取到任务 {{workerTaskInfo.flag}}')
@@ -305,9 +314,12 @@ const startCountdownTimer = () => {
 }
 
 onMounted(() => {
-  // 启动倒计时定时器
   initMonitor()
+  // 启动倒计时定时器
   startCountdownTimer()
+  // 启动监听拦截数据
+  watchInterceptedData()
+    
 })
 
 // 组件卸载时清理监听器

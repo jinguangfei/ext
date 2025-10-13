@@ -97,6 +97,24 @@ export const gotoUrl = async (url, tabeId ) => {
     console.error('[ChromeUtils] 跳转URL失败:', error)
   }
 }
+export const fetchUrl = (url, tabeId ) => {
+  return new Promise((resolve, reject) => {
+    fetch(url, {
+      "headers": {
+        "accept": "*/*",
+        "accept-language": "zh-CN,zh;q=0.9",
+        "sec-fetch-dest": "script",
+        "sec-fetch-mode": "no-cors",
+        "sec-fetch-site": "same-site"
+      },
+      "referrer": "https://cart.taobao.com",
+      "body": null,
+      "method": "GET",
+      "mode": "cors",
+      "credentials": "include"
+    }).then(res => res.text()).then(data => resolve(data)).catch(error => reject(error))
+  })
+}
 
 export const getUA = async () => {
   return navigator.userAgent
@@ -135,12 +153,11 @@ export const setCookie = (domain, name, value, expirationTime=60*25) => {
           expirationDate: Math.floor(Date.now() / 1000) + expirationTime, // 过期时间设置
           path: "/"
       };
-      chrome.cookies.set(cookieDetails, (cookie) => console.log("Cookie set:", cookie));
+      chrome.cookies.set(cookieDetails, (cookie) => {});
   }
 }
 export const setCookieStr = (domain, cookieStr) => {
   const cookies = cookieStr.replace(/\s/g, "").split(";")
-  console.log("Cookies:", cookies)
   cookies.forEach(cookie => {
     const [name, value] = cookie.split("=")
     setCookie(domain, name, value)

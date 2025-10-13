@@ -1,1 +1,15 @@
-{ "typeAcquisition": { "include": ["chrome"] } }
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@shared/*": ["src/shared/*"],
+      "@utils/*": ["src/utils/*"],
+      "@components/*": ["src/components/*"],
+      "@api/*": ["src/api/*"]
+    }
+  },
+  "typeAcquisition": {
+    "include": ["chrome"]
+  }
+}
