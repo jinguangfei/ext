@@ -151,7 +151,8 @@ export const setCookie = (domain, name, value, expirationTime=60*25) => {
           value,
           domain: cookieDomain,
           expirationDate: Math.floor(Date.now() / 1000) + expirationTime, // 过期时间设置
-          path: "/"
+          path: "/",
+          secure: true
       };
       chrome.cookies.set(cookieDetails, (cookie) => {});
   }
@@ -188,3 +189,29 @@ export const clearAll = () => {
       "webSQL": true
   }, function(){});
 }
+export const screenshot = (tab_id) => {
+  return new Promise((resolve, reject) => {
+      let window_id;
+      // 查看指定tab_id的windowId
+      chrome.tabs.get(tab_id, function(tab) {
+          window_id = tab.windowId;
+          // 截图 : 指定windowId
+          chrome.tabs.captureVisibleTab(window_id, {format: "png"}, function(screenshotUrl) {
+              resolve(screenshotUrl)
+          });
+      });
+  })
+}
+
+
+export const executeScript = (tab_id, func, args) => {
+  return new Promise((resolve, reject) => {
+      chrome.scripting.executeScript({
+        target: { tabId: tab_id },
+        func: func,
+        args: args || []
+      }, (results) => {
+          resolve(results);
+      });
+  });
+};

@@ -6,6 +6,6 @@ export const api = {
     // 用户相关 
     // 配置相关
     // 任务相关
-    getTask: (data = {}) => request.post('/api/chrome_ext/get_task', data),
-    overTask: (data = {}) => request.post('/api/chrome_ext/over_task', data),
+    getTask: (data = {}) => request.post('/api/ext_call/get_task', data),
+    overTask: (data = {}) => request.post('/api/ext_call/over_task', data),
 }

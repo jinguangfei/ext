@@ -39,9 +39,7 @@ export default defineManifest({
       matches: ['http://*/*', 'https://*/*'],
     },
   ],
-  permissions: ['sidePanel', 'storage', 'debugger', 'tabs', 'windows', 'cookies', 'browsingData'],
-  host_permissions: [
-    'http://*/*',
-    'https://*/*'
-  ]
+  // 注意：在 MV3 中，主机权限应放在 host_permissions，而不是 permissions
+  permissions: ['sidePanel', 'storage', 'debugger', 'tabs', 'windows', 'cookies', 'browsingData', 'activeTab', 'scripting', 'declarativeNetRequest'],
+  host_permissions: ['<all_urls>']
 })

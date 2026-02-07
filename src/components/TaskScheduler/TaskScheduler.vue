@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { NButton, NSpace, NCard, NTag, NAlert } from 'naive-ui'
 import { getCurrentTab, gotoUrl, fetchUrl, setCookieStr } from '../../shared/chrome_utils.js'
-import { clearAll, getUA, getCookieStr, setCookie } from '../../shared/chrome_utils.js'
+import { clearAll, getUA, getCookieStr, setCookie, screenshot, executeScript } from '../../shared/chrome_utils.js'
 import { DatabaseClient } from '../../shared/db-utils.js'
 import { api } from '../../api/index.js'
 import { Monitor } from '../../shared/monitor.js'
@@ -43,6 +43,7 @@ const props = defineProps({
 const currentConfig = ref(props.defaultConfig) // 当前配置
 const currentTab = ref(props.currentTab) // 当前标签页
 const isAbleConfig = ref(props.isAbleConfig) // 配置是否可用状态
+const savedTaskInfo = ref({}) // 保存的任务信息
 
 // 监听 props 变化，同步更新内部状态
 watch(() => props.defaultConfig, (newVal) => {
@@ -117,16 +118,30 @@ const clearInterceptedData = () => {
 // 发送拦截数据到服务器
 const sendInterceptedDataToServer = async (data) => {
   try {
+    const result = {"body":data.data}
+    if (currentConfig.value.function.includes("screen")){
+      // 等待3秒然后截图
+      await new Promise(resolve => setTimeout(resolve, 3000))
+      result.img = await screenshot(currentTab.value.id)
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      console.log('[TaskScheduler] result.img:', result.img)
+    }
+    if (currentConfig.value.function.includes("baidu")){
+      await gotoUrl("https://www.baidu.com", currentTab.value.id)
+    }
+    if (currentConfig.value.function.includes("damai_login")){
+      result.cookie = await getCookieStr("damai.cn")
+    }
 
-    await gotoUrl("https://www.baidu.com", currentTab.value.id)
+    
     console.log('[TaskScheduler] 发送拦截数据到服务器:', data)
     
     // 发送到服务器完成任务
     const response = await api.overTask({
-      task_info: taskInfo.value,
+      task_info:savedTaskInfo.value,
       cookie : cookie.value,
       real_url: data.url,
-      result: data.data,
+      result: result,
       ua: await getUA(),
     })
     
@@ -211,38 +226,37 @@ const fetchAndExecuteTask = async () => {
     }
     // 获取任务URL
     const workerTaskInfo = (await api.getTask(workerInfo.value)).data
-    const workerTaskInfoTest = {
-      task_info: {
-        "item_id":"834550783063",
-        "task_type":"LT_TAOBAO",
-      },
-      short_url: "https://e.tb.cn/h.SXH6trIriZcKCun",
-      config: {},
-      cookie: {},
-    }
+    savedTaskInfo.value = workerTaskInfo
     console.log('[TaskScheduler] 获取到任务URL:', workerTaskInfo)
     
-    taskInfo.value = workerTaskInfo.task_info
-    cookie.value = workerTaskInfo.cookie
-    const short_url = workerTaskInfo.short_url
-    if (short_url) {
+    const task_url = workerTaskInfo && workerTaskInfo.url
+    if (task_url) {
       // set config
-      DatabaseClient.set("default_config", workerTaskInfo.config)
-      clearAll()
-      setCookieStr("https://www.taobao.com",cookie.value.cookie)
-      setCookieStr("https://www.tmall.com",cookie.value.cookie)
-      setCookieStr("https://www.tmall.hk",cookie.value.cookie)
+      taskInfo.value = workerTaskInfo.task_info
+      cookie.value = workerTaskInfo.cookie
+      DatabaseClient.set("default_config", workerTaskInfo.ext_function)
+      console.log('[TaskScheduler] currentConfig.value:', currentConfig.value)
+      if (currentConfig.value.function.includes("cookie")){
+        clearAll()
+        console.log('[TaskScheduler] cookie:', cookie.value)
+        setCookieStr("https://www.taobao.com",cookie.value.cookie)
+        setCookieStr("https://www.tmall.com",cookie.value.cookie)
+        setCookieStr("https://www.tmall.hk",cookie.value.cookie)
+      }
 
       // 跳转到任务URL
       if (currentTab.value && currentTab.value.id) {
-        if (workerTaskInfo.config.type=="network") {
-          await gotoUrl(short_url, currentTab.value.id)
-          console.log('[TaskScheduler] 跳转到任务URL:', short_url)
-        } else if (workerTaskInfo.config.type=="fetch") {
-          //const body = await fetchUrl(short_url, currentTab.value.id)
-          console.log('[TaskScheduler] 请求任务URL:', short_url)
-          //console.log('[TaskScheduler] 请求任务URL:', body)
+        if (currentConfig.value.function.includes("crawl")){
+          await gotoUrl(task_url, currentTab.value.id)
         }
+      }
+      if (currentConfig.value.function.includes("damai_login")){
+        await executeScript(currentTab.value.id,()=>{
+          //document.querySelector("#fm-login-id").value = user
+          //document.querySelector("#fm-login-password").value = passwd
+          document.querySelector("#login-form > div.fm-btn > button").click()
+          //#},[task_url.split("####")[0],task_url.split("####")[1]])
+          },[])
       }
       
       // 更新下次任务时间

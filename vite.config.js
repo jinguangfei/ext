@@ -30,12 +30,14 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [UnoCSS(), crx({ manifest }), vue()],
     server: {
-      port: 5172,
+      host: 'localhost',
+      port: 5173,
       strictPort: true,
       hmr: {
-        port: 5172,
+        protocol: 'ws',
+        port: 5173,
         host: 'localhost',
-        clientPort: 5172,
+        clientPort: 5173,
       },
     },
     legacy: {
